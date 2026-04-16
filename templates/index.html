@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Griechisches Wörterbuch - Gottwein API</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(59, 130, 246, 0.5) rgba(15, 23, 42, 0.1);
+        }
+
+        *::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        *::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.1);
+        }
+
+        *::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.5);
+            border-radius: 4px;
+        }
+
+        *::-webkit-scrollbar-thumb:hover {
+            background: rgba(59, 130, 246, 0.7);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .glass-effect {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(71, 85, 105, 0.2);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .search-input:focus {
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-radius: 50%;
+            border-top-color: #3b82f6;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .best-label {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 0.375rem;
+            color: #93c5fd;
+            font-size: 0.875rem;
+            margin: 0.25rem 0.25rem 0.25rem 0;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-200 min-h-screen">
+    <!-- Navigation Header -->
+    <nav class="glass-effect border-b border-slate-700/50 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="text-3xl">🏛️</div>
+                    <h1 class="text-2xl font-bold gradient-text">
+                        Griechisches Wörterbuch
+                    </h1>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <!-- Search Section -->
+        <div class="mb-12">
+            <div class="glass-effect p-8 rounded-2xl border border-slate-700/50">
+                <p class="text-slate-400 mb-4 text-sm">
+                    Geben Sie ein griechisches Wort ein, um Analysen zu erhalten
+                </p>
+                <div class="flex gap-2">
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        placeholder="z.B. θεά, χαίρω, μῆνις..." 
+                        class="search-input flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none transition-all"
+                        autocomplete="off"
+                    >
+                    <button 
+                        id="searchBtn" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-lg transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                    >
+                        <span>Suchen</span>
+                        <span class="search-icon">🔍</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsContainer">
+            <!-- Results werden hier eingefügt -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="text-center py-12">
+            <div class="text-6xl mb-4">📚</div>
+            <h3 class="text-xl font-semibold text-slate-300 mb-2">
+                Bereit zum Erforschen
+            </h3>
+            <p class="text-slate-400">
+                Geben Sie ein griechisches Wort oben ein, um zu beginnen
+            </p>
+        </div>
+    </main>
+
+    <!-- JavaScript -->
+    <script>
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const emptyState = document.getElementById('emptyState');
+
+        // Enter-Taste zum Suchen
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        // Click-Listener für Button
+        searchBtn.addEventListener('click', performSearch);
+
+        async function performSearch() {
+            const word = searchInput.value.trim();
+            
+            if (!word) {
+                alert('Bitte geben Sie ein Wort ein');
+                return;
+            }
+
+            // UI aktualisieren
+            resultsContainer.innerHTML = '';
+            emptyState.style.display = 'none';
+            
+            // Loading-State
+            searchBtn.disabled = true;
+            const originalButtonText = searchBtn.innerHTML;
+            searchBtn.innerHTML = '<span class="loading-spinner"></span> Laden...';
+
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ word: word })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Fehler bei der Suche');
+                }
+
+                const data = await response.json();
+                displayResults(data.results, word);
+
+            } catch (error) {
+                resultsContainer.innerHTML = `
+                    <div class="bg-red-900/30 border border-red-700/50 rounded-lg p-6 text-red-300">
+                        <p class="font-semibold mb-2">⚠️ Fehler</p>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = originalButtonText;
+            }
+        }
+
+        function displayResults(results, searchWord) {
+            if (!results || results.length === 0) {
+                resultsContainer.innerHTML = `
+                    <div class="text-center py-12">
+                        <p class="text-slate-400">Keine Ergebnisse für "${searchWord}" gefunden</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <div class="mb-6">
+                    <h2 class="text-lg font-semibold text-slate-300 mb-4">
+                        ${results.length} Grundform(en) gefunden
+                    </h2>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            `;
+
+            results.forEach((result, index) => {
+                html += createResultCard(result, index);
+            });
+
+            html += '</div>';
+            resultsContainer.innerHTML = html;
+            
+            // Fade-in Animation
+            resultsContainer.querySelectorAll('.fade-in').forEach((el, i) => {
+                el.style.animationDelay = `${i * 50}ms`;
+            });
+        }
+
+        function createResultCard(result, index) {
+            const übersetzungen = result.übersetzungen || [];
+            const bestimmungen = result.bestimmungen || [];
+
+            const übersetzungenHtml = übersetzungen.length > 0 
+                ? übersetzungen.map(ü => `<li class="py-1 text-slate-300">• ${ü}</li>`).join('')
+                : '<li class="py-1 text-slate-400 italic">Keine Übersetzungen gefunden</li>';
+
+            const bestimmungenHtml = bestimmungen.length > 0
+                ? bestimmungen.map(b => `<span class="best-label">${b}</span>`).join('')
+                : '<span class="text-slate-500 italic text-sm">Keine Bestimmungen</span>';
+
+            return `
+                <div class="fade-in card-hover glass-effect border border-slate-700/50 rounded-xl p-6 transition-all duration-300 overflow-hidden">
+                    <!-- Grundform Header -->
+                    <div class="mb-6 pb-4 border-b border-slate-700/30">
+                        <h3 class="text-2xl font-bold text-blue-400 mb-2 break-words">
+                            ${result.grundform}
+                        </h3>
+                        <div class="flex items-center gap-2 text-slate-400 text-sm">
+                            <span class="inline-block">Grundform</span>
+                            <span class="text-xs bg-blue-900/30 px-2 py-1 rounded">
+                                #${index + 1}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Übersetzungen -->
+                    <div class="mb-6">
+                        <h4 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">
+                            💬 Übersetzungen
+                        </h4>
+                        <ul class="space-y-1 text-sm">
+                            ${übersetzungenHtml}
+                        </ul>
+                    </div>
+
+                    <!-- Morphologische Bestimmungen -->
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">
+                            📋 Bestimmungen (${bestimmungen.length})
+                        </h4>
+                        <div class="flex flex-wrap gap-2">
+                            ${bestimmungenHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Focus auf Input beim Laden
+        window.addEventListener('load', () => {
+            searchInput.focus();
+        });
+    </script>
+</body>
+</html>
