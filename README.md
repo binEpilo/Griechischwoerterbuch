@@ -9,16 +9,22 @@ Web-Anwendung zur Analyse und Übersetzung griechischer Wörter mit morphologisc
 - [API](#api)
 - [Projektstruktur](#projektstruktur)
 
-## Installation
+## Installation & Deployment
 
-### Mit start.sh (Linux/macOS)
+### Online auf Replit (empfohlen) 🚀
+
+1. Dieses Repository auf [Replit importieren](https://replit.com/import)
+2. "Run" drücken
+3. App läuft unter: `https://dein-projekt.replit.dev`
+
+### Lokal (Linux/macOS)
 
 ```bash
 chmod +x start.sh
 ./start.sh
 ```
 
-Das Skript erstellt eine virtuelle Umgebung, installiert Dependencies und startet die App in einer Screen-Session.
+Das Skript erstellt eine virtuelle Umgebung, installiert Dependencies und startet die App.
 
 Die App läuft unter `http://localhost:5000`
 
