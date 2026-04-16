@@ -65,3 +65,5 @@ Griechischwörterbuch/
 │   └── index.html        # Web-Interface
 └── README.md
 ```
+
+Vibecoded with ❤️ by binEpilo
