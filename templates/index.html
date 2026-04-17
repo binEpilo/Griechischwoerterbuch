@@ -55,10 +55,7 @@
         }
 
         .gradient-text {
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: #60a5fa;
         }
 
         .search-input:focus {
@@ -102,6 +99,13 @@
                         Griechisches Wörterbuch
                     </h1>
                 </div>
+                <a href="https://github.com/binEpilo/Griechischwoerterbuch.git" 
+                   target="_blank" 
+                   rel="noopener noreferrer"
+                   class="text-3xl hover:opacity-75 transition-opacity duration-200"
+                   title="GitHub Repository">
+                    🐙
+                </a>
             </div>
         </div>
     </nav>
@@ -110,23 +114,23 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <!-- Search Section -->
         <div class="mb-12">
-            <div class="glass-effect p-8 rounded-2xl border border-slate-700/50">
+            <div class="glass-effect p-4 sm:p-8 rounded-2xl border border-slate-700/50">
                 <p class="text-slate-400 mb-4 text-sm">
                     Geben Sie ein griechisches Wort ein, um Analysen zu erhalten
                 </p>
-                <div class="flex gap-2">
+                <div class="flex gap-1 sm:gap-2 flex-wrap sm:flex-nowrap">
                     <input 
                         type="text" 
                         id="searchInput" 
                         placeholder="z.B. θεά, χαίρω, μῆνις..." 
-                        class="search-input flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none transition-all"
+                        class="search-input flex-1 min-w-0 bg-slate-800/50 border border-slate-700 rounded-lg px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none transition-all"
                         autocomplete="off"
                     >
                     <button 
                         id="searchBtn" 
-                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-lg transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 sm:px-8 py-2 sm:py-3 rounded-lg transition-all duration-200 flex items-center gap-1 sm:gap-2 whitespace-nowrap flex-shrink-0"
                     >
-                        <span>Suchen</span>
+                        <span class="hidden sm:inline">Suchen</span>
                         <span class="search-icon">🔍</span>
                     </button>
                 </div>
