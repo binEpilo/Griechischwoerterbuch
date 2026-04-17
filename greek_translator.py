@@ -3,7 +3,9 @@ from bs4 import BeautifulSoup
 from typing import List
 import re
 import unicodedata
-from hellenike import translate
+from hellenike import translate as hellenike_translate
+from gottwein import translate as gottwein_translate
+from logeion import pape
 
 # Wörterbuch für Morphologie-Abkürzungen
 MORPHOLOGY_TRANSLATIONS = {
@@ -97,7 +99,11 @@ def _translate_morphology(morph_string: str) -> str:
 
 def get_greek_translations(greek_word: str) -> List[str]:
     """
-    Ruft die deutschen Übersetzungen für ein griechisches Wort von der Gottwein-Website ab.
+    Ruft die deutschen Übersetzungen für ein griechisches Wort ab.
+    Versucht mehrere Quellen in dieser Hierarchie:
+    1. hellenike.de
+    2. gottwein.de
+    3. logeion (Pape)
     
     Args:
         greek_word (str): Das gesuchte griechische Wort (z.B. 'χαίρω', 'μῆνις')
@@ -110,90 +116,28 @@ def get_greek_translations(greek_word: str) -> List[str]:
         >>> for translation in translations:
         ...     print(translation)
     """
-    hellenike = translate(greek_word)
-    if hellenike:
-        return hellenike
     
-    # URL der Gottwein-Website
-    base_url = "https://www.gottwein.de/GrWk/Gr01.php"
+    # 1. Versuche hellenike
+    hellenike_results = hellenike_translate(greek_word)
+    if hellenike_results:
+        return hellenike_results
     
-    # Parameter für die Suche
-    params = {'qu': greek_word, 'ab': 'Hui'}
+    # 2. Versuche gottwein
+    gottwein_results = gottwein_translate(greek_word)
+    if gottwein_results:
+        return gottwein_results
     
+    # 3. Versuche logeion (Pape)
     try:
-        # HTTP-Request mit User-Agent
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        # GET-Request zur Website
-        response = requests.get(base_url, params=params, headers=headers, timeout=10)
-        response.encoding = 'utf-8'  # Stelle sicher, dass UTF-8 verwendet wird
-        response.raise_for_status()
-        
-        # HTML mit BeautifulSoup parsen
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Übersetzungen extrahieren aus den onClick="gowo(...)" Attributen
-        # Strategie: Nur Übersetzungen nehmen, deren griechisches Wort (linke Spalte)
-        # mit dem gesuchten Wort anfängt (Flexionsformen sind OK, aber nicht Wendungen)
-        translations = set()
-        
-        # Normalisiere das Suchword für Vergleich
-        search_word_nfc = unicodedata.normalize('NFC', greek_word)
-        
-        # Finde alle TDs mit width:190px die "griechische Synonyme" enthalten
-        for td in soup.find_all('td', style=re.compile(r'width:190px')):
-            img = td.find('img', alt=re.compile(r'griechische Synonyme', re.IGNORECASE))
-            
-            if img:
-                # Extrahiere die Übersetzung aus dem onclick-Attribut
-                onclick = img.get('onclick', '')
-                match = re.search(r'gowo\("([^"]+)"\)', onclick)
-                
-                if match:
-                    translation = match.group(1).strip()
-                    
-                    # Extrahiere das griechische Wort aus der TD
-                    greek_word_in_cell = td.get_text(strip=True)
-                    
-                    # Normalisiere auch das griechische Wort für Vergleich (NFC)
-                    greek_word_cell_nfc = unicodedata.normalize('NFC', greek_word_in_cell)
-                    
-                    # WICHTIG: Akzeptiere nur das EXAKTE Wort oder mit grammatischen Anmerkungen (Komma)
-                    # Grammatische Anmerkungen sind z.B. ", ἡ" für Artikel
-                    # NICHT akzeptieren: Wendungen mit Leerzeichen wie "χαίρω ἐᾶν" oder "χαίρω ποιῶν"
-                    
-                    is_exact_match = (greek_word_cell_nfc == search_word_nfc)
-                    is_grammar_variant = (greek_word_cell_nfc.startswith(search_word_nfc + ',') or 
-                                         greek_word_cell_nfc.startswith(search_word_nfc + ' '))
-                    
-                    # Nur akzeptieren wenn:
-                    # 1. Exakt gleich (z.B. χαίρω = χαίρω)
-                    # 2. Mit Komma-Grammatik (z.B. μῆνις, ἡ = μῆνις)
-                    # NICHT akzeptieren wenn: Mit Leerzeichen (= Wendung)
-                    if is_exact_match or (is_grammar_variant and greek_word_cell_nfc.startswith(search_word_nfc + ',')):
-
-                        # Zusätzliche Filter für die Übersetzung
-                        # Keine sehr langen Übersetzungen (wahrscheinlich Wendungen)
-                        word_count = len(translation.split())
-                        if word_count <= 4:
-                            # Keine Klammern in der Übersetzung
-                            if '(' not in translation and ')' not in translation:
-                                translations.add(translation)
-        
-        # Konvertiere zu sortierter Liste
-        result = sorted(list(translations))
-        
-        if not result:
-            return [f"Keine Übersetzungen gefunden für '{greek_word}'"]
-        
-        return result
+        pape_results = pape(greek_word)
+        if pape_results:
+            return pape_results
+    except (LookupError, RuntimeError):
+        # Kein Eintrag gefunden
+        pass
     
-    except requests.exceptions.RequestException as e:
-        return [f"Fehler beim Abrufen der Website: {str(e)}"]
-    except Exception as e:
-        return [f"Fehler bei der Verarbeitung: {str(e)}"]
+    # Wenn nichts gefunden wurde
+    return [f"Keine Übersetzungen gefunden für '{greek_word}'"]
 
 
 def get_greek_word_analysis(greek_word: str) -> List[dict]:
