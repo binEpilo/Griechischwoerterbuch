@@ -93,6 +93,66 @@ def fetch_word_data(greek_word: str) -> Optional[Dict]:
     except Exception as e:
         print(f"Fehler beim Abrufen von '{greek_word}': {e}")
         return None
+
+def fetch_all_word_data(greek_word: str) -> List[Dict]:
+    """
+    Ruft ALLE Einträge für ein griechisches Wort ab.
+    Dies ist besonders wichtig für Wörter wie Präpositionen, die mehrere grammatikalische Formen haben.
+    Z.B. παρά gibt es als "Präp. m. Gen.", "Präp. m. Dat." und "Präp. m. Akk."
+    
+    Args:
+        greek_word (str): Das griechische Wort zu suchen
+    
+    Returns:
+        List[Dict]: Eine Liste von ALL matching Einträgen (nicht nur der erste)
+    """
+    try:
+        url = BASE_URL + quote(greek_word)
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        response.raise_for_status()
+
+        match = re.search(r'\[\{.*\}\]', response.text, re.DOTALL)
+        if not match:
+            return []
+
+        data = json.loads(match.group(0))
+        if not isinstance(data, list):
+            return []
+
+        search_exact = normalize_exact_greek(greek_word)
+        normalized_search = normalize_greek(greek_word)
+
+        articles = {
+            normalize_exact_greek('ὁ'),
+            normalize_exact_greek('ἡ'),
+            normalize_exact_greek('τό'),
+            normalize_exact_greek('το'),
+        }
+
+        # 1. Sammle ALLE exakten Matches mit Akzenten, aber Unicode-normalisiert
+        exact_matches = []
+        for entry in data:
+            h_words = extract_greek_tokens(entry.get('h', ''))
+            for word in h_words:
+                word_exact = normalize_exact_greek(word)
+                if word_exact not in articles and word_exact == search_exact:
+                    exact_matches.append(entry)
+                    break  # Nicht mehrmals hinzufügen für das gleiche Entry
+
+        if exact_matches:
+            return exact_matches
+
+        # 2. Fallback über sort - sammle ALLE Kandidaten
+        candidates = [
+            entry for entry in data
+            if entry.get('sort', '').lower().strip() == normalized_search
+        ]
+
+        return candidates
+
+    except Exception as e:
+        print(f"Fehler beim Abrufen von '{greek_word}': {e}")
+        return []
         
 def clean_text(text: str) -> str:
     """Entfernt HTML-Tags, Zero-Width-Spaces und andere Artefakte."""
@@ -110,17 +170,43 @@ def clean_text(text: str) -> str:
 
 
 def clean_meaning(text: str) -> str:
-    """Entfernt Sonderzeichen am Anfang von Bedeutungen."""
+    """
+    Entfernt nur bekannte Marker am Anfang von Bedeutungen.
+    
+    Die hellenike.de API nutzt verschiedene Marker-Symbole und Buchstaben:
+    - Symbol-Marker: !, ", &, ', $, #, %
+    - Buchstaben-Marker: A-Z (als Kategorien, z.B. "Bder Schmuck", "Cdie Welt")
+    
+    Heuristic für Buchstaben-Marker:
+    - Marker sind IMMER ein Großbuchstabe direkt gefolgt von einem Kleinbuchstaben
+    - Dann folgt ein Wort (typischerweise ein deutsches Artikel oder Präposition)
+    - Diese Wörter sind KURZ (1-4 Zeichen): der, die, das, den, etc.
+    
+    Echte Wörter wie "Verderben" hätten das Wort DIREKT nach dem Marker sehr lang
+    (8+ Zeichen), daher entfernen wir nur wenn Wort-Länge <= 4 ist.
+    """
     text = text.strip()
-    # Entferne einfache/doppelte Anführungszeichen und Buchstaben-Marker am Anfang
-    while text and (text[0] in '\'"ABCDEFGHIJKLMNOPQRSTUVWXYZ' or text[0] in '(){[]}'):
-        # Aber nur wenn es ein Marker ist, nicht wenn es das Wort ist
-        if len(text) > 1 and text[0] in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' and text[1].islower():
+    
+    # Entferne Symbol-Marker am Anfang
+    while text and text[0] in '\'"(){}[]!&#$%':
+        text = text[1:].strip()
+    
+    # Entferne Buchstaben-Marker am Anfang (A-Z)
+    # Aber nur wenn das folgende Wort kurz ist (typischerweise Artikel)
+    if len(text) > 1 and text[0] in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' and text[1].islower():
+        # Finde das nächste Leerzeichen um die Wort-Länge zu bestimmen
+        space_idx = text.find(' ', 1)
+        if space_idx == -1:
+            space_idx = len(text)
+        
+        # Wort-Länge NACH dem Marker (also text[1:space_idx])
+        word_length = space_idx - 1
+        
+        # Marker-Wörter sind typischerweise kurz (deutsche Artikel, Präpositionen)
+        # Echte Wörter wie "Verderben" sind länger
+        if word_length <= 4:
             text = text[1:].strip()
-        elif text[0] in '\'"{}[]':
-            text = text[1:].strip()
-        else:
-            break
+    
     return text.strip()
 
 
@@ -177,15 +263,45 @@ def parse_translation_markup(markup_text: str) -> List[str]:
     return meanings
 
 def translate(greek_word: str) -> List[str]:
-    data = fetch_word_data(greek_word)
-    if not data:
+    """
+    Übersetzt ein griechisches Wort ins Deutsche.
+    Für Wörter mit mehreren grammatikalischen Formen (z.B. Präpositionen mit verschiedenen Fällen)
+    werden ALLE Einträge verarbeitet und die Bedeutungen mit ihrer Grammatik kombiniert.
+    
+    Args:
+        greek_word (str): Das griechische Wort
+    
+    Returns:
+        List[str]: Liste von Übersetzungen, optional mit grammatikalischer Info
+    """
+    # Hole ALLE Einträge für dieses Wort
+    all_entries = fetch_all_word_data(greek_word)
+    if not all_entries:
         return []
 
     all_meanings = []
-    for trans in data.get('tr', []):
-        if trans.get('l') == 'g':
-            all_meanings.extend(parse_translation_markup(trans.get('t', '')))
+    
+    for data in all_entries:
+        # Hole die grammatikalische Information (z.B. "Präp. m. Gen.", "Präp. m. Dat.", etc.)
+        grammar = data.get('g', '').strip()
+        
+        # Verarbeite alle Übersetzungen in diesem Eintrag
+        entry_meanings = []
+        for trans in data.get('tr', []):
+            if trans.get('l') == 'g':
+                entry_meanings.extend(parse_translation_markup(trans.get('t', '')))
+        
+        # Kombiniere Bedeutungen mit Grammatik
+        # Wenn es eine Grammatik gibt (besonders für Präpositionen), hänge sie an
+        if grammar and entry_meanings:
+            for meaning in entry_meanings:
+                # Format: "Bedeutung (Grammatik)"
+                combined = f"{meaning} ({grammar})"
+                all_meanings.append(combined)
+        else:
+            all_meanings.extend(entry_meanings)
 
+    # Entferne Duplikate (behalte Reihenfolge)
     seen = set()
     unique = []
     for m in all_meanings:
