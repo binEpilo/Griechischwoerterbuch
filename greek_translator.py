@@ -243,18 +243,3 @@ def get_greek_word_analysis(greek_word: str) -> List[dict]:
     except Exception as e:
         return [{'grundform': greek_word, 'übersetzungen': [f"Fehler bei der Verarbeitung: {str(e)}"], 'bestimmungen': []}]
 
-if __name__ == "__main__":
-    test_word = 'θεά'
-    print(f"\nMorphologische Analysen für '{test_word}':")
-    analyses = get_greek_word_analysis(test_word)
-    
-    for analysis in analyses:
-        print(f"\nGrundform: {analysis['grundform']}")
-        print(f"Übersetzungen:")
-        for ü in analysis['übersetzungen']:
-            print(f"  - {ü}")
-        print(f"Bestimmungen ({len(analysis['bestimmungen'])}):")
-        for best in analysis['bestimmungen'][:5]:  # Zeige nur erste 5
-            print(f"  - {best}")
-        if len(analysis['bestimmungen']) > 5:
-            print(f"  ... und {len(analysis['bestimmungen']) - 5} weitere")
