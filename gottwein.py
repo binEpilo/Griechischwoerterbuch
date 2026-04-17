@@ -85,14 +85,7 @@ def translate(greek_word: str) -> List[str]:
                     # 2. Mit Komma-Grammatik (z.B. μῆνις, ἡ = μῆνις)
                     # NICHT akzeptieren wenn: Mit Leerzeichen (= Wendung)
                     if is_exact_match or (is_grammar_variant and greek_word_cell_nfc.startswith(search_word_nfc + ',')):
-
-                        # Zusätzliche Filter für die Übersetzung
-                        # Keine sehr langen Übersetzungen (wahrscheinlich Wendungen)
-                        word_count = len(translation.split())
-                        if word_count <= 4:
-                            # Keine Klammern in der Übersetzung
-                            if '(' not in translation and ')' not in translation:
-                                translations.add(translation)
+                        translations.add(translation)
         
         # Konvertiere zu sortierter Liste
         result = sorted(list(translations))
