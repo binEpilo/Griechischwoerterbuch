@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 from typing import List
 import re
 import unicodedata
-
+from hellenike import translate
 
 # Wörterbuch für Morphologie-Abkürzungen
 MORPHOLOGY_TRANSLATIONS = {
@@ -110,6 +110,9 @@ def get_greek_translations(greek_word: str) -> List[str]:
         >>> for translation in translations:
         ...     print(translation)
     """
+    hellenike = translate(greek_word)
+    if hellenike:
+        return hellenike
     
     # URL der Gottwein-Website
     base_url = "https://www.gottwein.de/GrWk/Gr01.php"

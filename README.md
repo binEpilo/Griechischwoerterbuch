@@ -7,7 +7,6 @@ Web-Anwendung zur Analyse und Übersetzung griechischer Wörter mit morphologisc
 - [Installation](#installation)
 - [Verwendung](#verwendung)
 - [API](#api)
-- [Projektstruktur](#projektstruktur)
 
 ## Installation & Deployment
 
@@ -57,19 +56,6 @@ Die App läuft unter `http://localhost:5000`
     }
   ]
 }
-```
-
-## Projektstruktur
-
-```
-Griechischwörterbuch/
-├── app.py                 # Flask-App mit /api/search Endpoint
-├── greek_translator.py    # Übersetzungs- und Analysemodul
-├── requirements.txt       # Python-Abhängigkeiten
-├── start.sh              # Startup-Skript
-├── templates/
-│   └── index.html        # Web-Interface
-└── README.md
 ```
 
 Vibecoded with ❤️ by binEpilo
