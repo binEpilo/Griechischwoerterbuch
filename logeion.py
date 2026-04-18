@@ -50,9 +50,19 @@ def _strip_lemma_lead(line: str, headword: str) -> str:
     rest = t[len(headword) :].lstrip()
     if rest.startswith(","):
         rest = rest[1:].lstrip()
-    m = re.match(r"[^\s,]+,\s*", rest)
-    if m:
-        rest = rest[m.end() :]
+
+    # Entferne nachfolgende Lemma/Artikel-Angaben solange, bis die eigentliche Übersetzung
+    # beginnt. Bei Pape kann die erste Bedeutung direkt mit einem lateinischen Wort anfangen.
+    while True:
+        m = re.match(r"([^,]+,\s*)(.*)", rest)
+        if not m:
+            break
+        token = m.group(1)
+        remaining = m.group(2)
+        if re.search(r"[A-Za-z]", token):
+            break
+        rest = remaining.lstrip()
+
     return rest.lstrip()
 
 

@@ -252,6 +252,12 @@ def clean_meaning(text: str) -> str:
     
     # Entferne Symbol-Marker am Anfang
     while text and text[0] in '\'"(){}[]!&#$%':
+        if text[0] == '(' and text.endswith(')') and text[1:-1].count('(') == 0:
+            break
+        if text[0] == '[' and text.endswith(']') and text[1:-1].count('[') == 0:
+            break
+        if text[0] == '{' and text.endswith('}') and text[1:-1].count('{') == 0:
+            break
         text = text[1:].strip()
     
     # Entferne A, B, C, D Marker wenn das folgende Wort im Deutschen existiert
