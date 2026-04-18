@@ -12,6 +12,12 @@ import unicodedata
 from typing import List, Dict, Optional
 from urllib.parse import quote
 
+try:
+    from spellchecker import SpellChecker
+    SPELL_CHECKER = SpellChecker(language='de')
+except ImportError:
+    SPELL_CHECKER = None
+
 BASE_URL = "https://hellenike.de/DictGreek?method=search&word="
 
 HEADERS = {
@@ -47,6 +53,40 @@ def extract_greek_tokens(text: str) -> List[str]:
 def normalize_exact_greek(text: str) -> str:
     return unicodedata.normalize('NFC', clean_text(text)).strip().lower()
 
+def has_accents(text: str) -> bool:
+    """
+    Prüft ob ein griechisches Wort Akzente/Diakriten enthält.
+    """
+    # Normalisiere zu NFD (decomposed form) um separate Diakriten zu sehen
+    nfd = unicodedata.normalize('NFD', text)
+    # Prüfe ob es Combining Diacritical Marks gibt (Kategorie 'Mn')
+    for char in nfd:
+        if unicodedata.category(char) == 'Mn':
+            return True
+    return False
+
+def has_matching_accents(word1: str, word2: str) -> bool:
+    """
+    Prüft ob zwei griechische Wörter die gleichen Akzente an den gleichen Positionen haben.
+    
+    Dies verhindert falsche Matches wie:
+    - θέρμος (suche) vs θερμός (API) - unterschiedliche Akzent-Position
+    
+    Wir vergleichen die Strings direkt nach Unicode-Normalisierung (NFC).
+    Wenn die Struktur der Akzente unterschiedlich ist, wird ein Mismatch erkannt.
+    """
+    # Normalisiere beide Wörter zu NFC (standard Unicode form)
+    # Dies stellt sicher, dass Akzente konsistent behandelt werden
+    w1_clean = clean_text(word1).strip().lower()
+    w2_clean = clean_text(word2).strip().lower()
+    
+    w1_nfc = unicodedata.normalize('NFC', w1_clean)
+    w2_nfc = unicodedata.normalize('NFC', w2_clean)
+    
+    # Direkter Vergleich der normalisierten Strings
+    # Wenn Akzente an unterschiedlichen Positionen sind, werden die Strings unterschiedlich sein
+    return w1_nfc == w2_nfc
+
 def fetch_word_data(greek_word: str) -> Optional[Dict]:
     try:
         url = BASE_URL + quote(greek_word)
@@ -77,13 +117,27 @@ def fetch_word_data(greek_word: str) -> Optional[Dict]:
             for word in h_words:
                 word_exact = normalize_exact_greek(word)
                 if word_exact not in articles and word_exact == search_exact:
-                    return entry
+                    # Zusätzliche Prüfung: Akzente müssen exakt übereinstimmen
+                    if has_matching_accents(greek_word, word):
+                        return entry
 
-        # 2. Fallback über sort
-        candidates = [
-            entry for entry in data
-            if entry.get('sort', '').lower().strip() == normalized_search
-        ]
+        # WICHTIG: Falls der Suchtext Akzente hat und kein Match mit Akzenten gefunden wurde,
+        # nicht weiter mit dem akzentlosen Fallback suchen.
+        if has_accents(greek_word):
+            return None
+
+        # 2. Fallback über sort - nur wenn der Suchtext KEINE Akzente hat
+        # ABER: Auch hier müssen die Akzente exakt passen!
+        candidates = []
+        for entry in data:
+            if entry.get('sort', '').lower().strip() == normalized_search:
+                # Prüfe dass Akzente passen - wenn die API das Wort mit Akzenten speichert,
+                # sollte ein Suchtext ohne Akzent auch nichts finden
+                h_words = extract_greek_tokens(entry.get('h', ''))
+                for word in h_words:
+                    if has_matching_accents(greek_word, word):
+                        candidates.append(entry)
+                        break
 
         if len(candidates) == 1:
             return candidates[0]
@@ -136,17 +190,29 @@ def fetch_all_word_data(greek_word: str) -> List[Dict]:
             for word in h_words:
                 word_exact = normalize_exact_greek(word)
                 if word_exact not in articles and word_exact == search_exact:
-                    exact_matches.append(entry)
-                    break  # Nicht mehrmals hinzufügen für das gleiche Entry
+                    # Zusätzliche Prüfung: Akzente müssen exakt übereinstimmen
+                    if has_matching_accents(greek_word, word):
+                        exact_matches.append(entry)
+                        break  # Nicht mehrmals hinzufügen für das gleiche Entry
 
-        if exact_matches:
+        # WICHTIG: Falls der Suchtext Akzente hat und kein Match mit Akzenten gefunden wurde,
+        # nicht weiter mit dem akzentlosen Fallback suchen. Der Nutzer wollte ein spezifisches Wort.
+        if has_accents(greek_word):
             return exact_matches
 
-        # 2. Fallback über sort - sammle ALLE Kandidaten
-        candidates = [
-            entry for entry in data
-            if entry.get('sort', '').lower().strip() == normalized_search
-        ]
+        # 2. Fallback über sort - nur wenn der Suchtext KEINE Akzente hat
+        # ABER: Auch hier müssen die Akzente exakt passen!
+        # Das verhindert, dass "θερμος" (ohne Akzent) "θερμός" (mit Akzent) findet
+        candidates = []
+        for entry in data:
+            if entry.get('sort', '').lower().strip() == normalized_search:
+                # Prüfe dass Akzente passen - wenn die API das Wort mit Akzenten speichert,
+                # sollte ein Suchtext ohne Akzent auch nichts finden
+                h_words = extract_greek_tokens(entry.get('h', ''))
+                for word in h_words:
+                    if has_matching_accents(greek_word, word):
+                        candidates.append(entry)
+                        break
 
         return candidates
 
@@ -173,17 +239,14 @@ def clean_meaning(text: str) -> str:
     """
     Entfernt nur bekannte Marker am Anfang von Bedeutungen.
     
-    Die hellenike.de API nutzt verschiedene Marker-Symbole und Buchstaben:
-    - Symbol-Marker: !, ", &, ', $, #, %
-    - Buchstaben-Marker: A-Z (als Kategorien, z.B. "Bder Schmuck", "Cdie Welt")
+    Die hellenike.de API nutzt drei Buchstaben-Marker: A, B, C, D
+    Diese sind Kategorie-Marker, z.B. "Bder Schmuck", "Cdie Welt", "Ablind"
     
-    Heuristic für Buchstaben-Marker:
-    - Marker sind IMMER ein Großbuchstabe direkt gefolgt von einem Kleinbuchstaben
-    - Dann folgt ein Wort (typischerweise ein deutsches Artikel oder Präposition)
-    - Diese Wörter sind KURZ (1-4 Zeichen): der, die, das, den, etc.
-    
-    Echte Wörter wie "Verderben" hätten das Wort DIREKT nach dem Marker sehr lang
-    (8+ Zeichen), daher entfernen wir nur wenn Wort-Länge <= 4 ist.
+    Strategie: 
+    1. Entferne Symbol-Marker (!, ", &, etc.) - diese sind eindeutig
+    2. Für A, B, C Marker: Überprüfe ob das folgende Wort im deutschen Wörterbuch existiert
+       - Falls ja (z.B. "blind", "der"): Marker entfernen
+       - Falls nein oder SPELL_CHECKER nicht verfügbar: Marker behalten (könnte echte Bedeutung sein)
     """
     text = text.strip()
     
@@ -191,20 +254,18 @@ def clean_meaning(text: str) -> str:
     while text and text[0] in '\'"(){}[]!&#$%':
         text = text[1:].strip()
     
-    # Entferne Buchstaben-Marker am Anfang (A-Z)
-    # Aber nur wenn das folgende Wort kurz ist (typischerweise Artikel)
-    if len(text) > 1 and text[0] in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' and text[1].islower():
-        # Finde das nächste Leerzeichen um die Wort-Länge zu bestimmen
+    # Entferne A, B, C, D Marker wenn das folgende Wort im Deutschen existiert
+    if SPELL_CHECKER and len(text) > 1 and text[0] in 'ABCD' and text[1].islower():
+        # Finde das nächste Leerzeichen um das erste Wort zu extrahieren
         space_idx = text.find(' ', 1)
         if space_idx == -1:
             space_idx = len(text)
         
-        # Wort-Länge NACH dem Marker (also text[1:space_idx])
-        word_length = space_idx - 1
+        # Das erste Wort NACH dem Marker
+        first_word = text[1:space_idx].lower()
         
-        # Marker-Wörter sind typischerweise kurz (deutsche Artikel, Präpositionen)
-        # Echte Wörter wie "Verderben" sind länger
-        if word_length <= 4:
+        # Wenn das Wort im deutschen Wörterbuch existiert, entferne den Marker
+        if first_word in SPELL_CHECKER:
             text = text[1:].strip()
     
     return text.strip()
